@@ -1088,18 +1088,28 @@ impl<T> Slab<T> {
         }
     }
 
+    #[inline]
     fn insert_at(&mut self, key: usize, val: T) {
-        self.len += 1;
-
+        let next;
         if key == self.entries.len() {
-            self.entries.push(Entry::Occupied(val));
-            self.next = key + 1;
+            self.entries.reserve(1);
+            next = key + 1;
+            // SAFETY: enough capacity has been reserved and the new element is immediately initialized below.
+            unsafe { self.entries.set_len(next) };
         } else {
-            self.next = match self.entries.get(key) {
+            next = match self.entries.get(key) {
                 Some(&Entry::Vacant(next)) => next,
                 _ => unreachable!(),
             };
-            self.entries[key] = Entry::Occupied(val);
+        }
+        
+        self.next = next;
+        self.len += 1;
+
+        // SAFETY: `key` either points to a vacant entry or an uninitialized element.
+        unsafe {
+            let ptr = self.entries.as_mut_ptr().add(key);
+            core::ptr::write(ptr, Entry::Occupied(val));
         }
     }
 
