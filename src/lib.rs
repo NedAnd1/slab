@@ -1177,6 +1177,72 @@ impl<T> Slab<T> {
         self.try_remove(key).expect("invalid key")
     }
 
+    /// Tries to remove the value associated with the given key,
+    /// dropping the value in place if the key existed.
+    /// Returns true if the value was dropped.
+    ///
+    /// The key is then released and may be associated with future stored
+    /// values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use slab::*;
+    /// let mut slab = Slab::new();
+    ///
+    /// let hello = slab.insert("hello");
+    ///
+    /// assert!(slab.contains(hello));
+    /// assert!(slab.try_discard(hello));
+    /// assert!(!slab.contains(hello));
+    /// ```
+    pub fn try_discard(&mut self, key: usize) -> bool {
+        if let Some(entry) = self.entries.get_mut(key) {
+            if let Entry::Occupied(_) = entry {
+                let next = self.next;
+                self.next = key;
+                self.len -= 1;
+
+                // SAFETY: `entry` is occupied, so it is safe to drop in place and write a new value.
+                unsafe {
+                    core::ptr::drop_in_place(entry);
+                    core::ptr::write(entry, Entry::Vacant(next));
+                };
+
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Remove and drop the value associated with the given key.
+    ///
+    /// The key is then released and may be associated with future stored
+    /// values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `key` is not associated with a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use slab::*;
+    /// let mut slab = Slab::new();
+    ///
+    /// let hello = slab.insert("hello");
+    ///
+    /// assert!(slab.contains(hello));
+    /// slab.discard(hello);
+    /// assert!(!slab.contains(hello));
+    /// ```
+    #[track_caller]
+    pub fn discard(&mut self, key: usize) {
+        if !self.try_discard(key) {
+            panic!("invalid key");
+        }
+    }
+
     /// Return `true` if a value is associated with the given key.
     ///
     /// # Examples
